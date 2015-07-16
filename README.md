@@ -10,7 +10,7 @@ Website:
 
 ###Example
 
-```
+```groovy
 global String app = "appinventor.ai_henrytejera.ImperiusGeorge";
 global String mainActivity = "/.Screen1";
 global String apk = "ImperiusGeorge.apk";
