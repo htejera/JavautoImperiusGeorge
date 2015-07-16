@@ -1,0 +1,454 @@
+//A simple Javauto ImperiusGeorge client. Remote-control/execute Java on Android phones via Javauto.
+//
+//Preconditions: 
+//  0. Requires the Android SDK to be installed and tools directory to be in the path
+//  1. Ensure USB debugging is enabled.
+//  2. Accept an RSA key fingerprint that allows debugging through this computer.
+//  3. Push the test.jar file to /data/local/tmp/test.jar 
+//  4. Run adb forward tcp:1337 tcp:1337
+//  5. Run adb shell uiautomator runtest test.jar -c imperiusgeorge.TestServer -e port 1337
+//
+//MIT License
+//Copyright © 2015 Oscar Henry Tejera    
+
+import java.util.Arrays; 
+
+global boolean verbose = false;
+
+//#START: ADB commands
+
+//Execute an ADB command.
+//@param command - The command to execute.
+//@return  The output of the command.
+func String adb_execution(String command) {
+        String executeThis = "adb %s" % (command);
+        if(verbose)
+        	print("Execute: [%s]" % (executeThis));
+       
+        if(SYSTEM_OS.toLowerCase().contains("windows")) {
+            return exec("cmd /c %s" % (executeThis));
+        } else {
+            return exec(executeThis);
+        }      
+}
+
+//Download a specified file from an emulator/device to your computer.
+//@param serial - The serial device id.
+//@param remoteFile - The full path to the (remote) file.
+//@param localFile - the fully path to the destination (local) file.
+func void adb_pull(String serial, String remoteFile, String localFile){
+	 String id = (!serial.isEmpty())?"-s %s " %(serial):"";
+	 String cmd = serial + "pull %s %s" % (remoteFile, localFile);
+	 adb_execution(cmd);
+}
+
+//Pushes an Android application (specified as a full path to an .apk file) to an emulator/device.
+//@param serial - The serial device id.
+//@param mode - Can be: -l:test.apk forward lock application
+//                      -r:test.apk replace existing application
+//                      -t:test.apk allow test packages
+//                      -s:test.apk install application on sdcard
+//                      -d:test.apk allow version code downgrade
+//                      -p:test.apk partial application install
+//@param apk - The full path to the apk.
+//@return The install command output.
+func String install(String serial, String mode, String apk){
+	String id = (!serial.isEmpty())?"-s %s " %(serial):"";
+	String cmd = serial + "%s install %s %s " % (serial, mode, apk);
+    return adb_execution(cmd);
+}
+
+//Removes a package from the emulator/device.
+//@param serial - The serial device id.
+//@param mode - Can be: -k: Keep the data and cache directories around after package removal.
+//@param pack - The full path to the package.
+//@return The uninstall command output.
+func String uninstall(String serial,String mode, String pack){
+    return adb_execution("-s %s uninstall %s %s " % (serial, mode, pack));
+}
+//#END: ADB commands
+
+//#START: ImperiusGeorge commands
+
+//Server data
+struct Connection {	
+	String ip;
+	String port;	
+	int timeout;
+	String deviceId;
+}
+
+global Connection server;
+
+//Start server session.
+//@param deviceId - The serial deviceID. Can be empty if only have one device.
+//@param ip - The ImperiusGeorge server IP.
+//@param port - The ImperiusGeorge server port.
+//@param timeout - Timeout
+//@return A server connection instance.
+func void startServer(String deviceId, String ip, String port,  int timeout){
+	server = new Connection();
+	server.ip = ip;
+	server.port = port;
+	server.timeout = timeout;
+	server.deviceId = (!deviceId.isEmpty())?"-s %s " %(deviceId):"";
+}
+
+//Terminating server session.
+func void stopServer(){
+	String method = "terminate";
+	executeGet(method);
+}
+
+//Start an activity
+//@param activity - The activity name.
+//@return The command output.
+func String startApp(String activity){
+	String cmd = "am start -a android.intent.action.MAIN -n %s" % (activity);
+	String response = shell(cmd);
+	wakeup();
+	sleep(3000);
+	return response;
+}
+
+//Stop an activity.
+//@param activity - The activity name.
+func void stopApp(String activity){
+	String cmd = "am force-stop  %s" % (activity);
+	shell(cmd);	
+}
+
+//Wake up device.
+func void wakeup(){
+    String dump = shell("dumpsys power");  
+    if(dump.contains("mScreenOn=false")){
+	   	shell("input keyevent 26");
+    }
+}
+
+//Click over an element with the given text.
+//@param text - The element text.
+//@return boolean -  True if the element exist, otherwise returns false.
+func boolean click(String text){
+	String method = "clickIfExactExists";
+	String param = "[\"%s\"]" % (text);
+
+	String response = executePost(method, param);
+	if(!response.isEmpty() && !hasError(response)) {
+		return (response.equalsIgnoreCase("true"))?true:false;
+	} else {
+		setError(method, response);
+	}
+	return false;
+}
+
+//Click and wait for new window if this text item exists.
+//@param text - The element text.
+//@return boolean -  True if the element exist, otherwise returns false.
+func boolean clickAndWait(String text){
+	String method = "clickAndWaitForNewWindow";
+	String param = "[\"%s\"]" % (text);
+
+	String response = executePost(method, param);
+	if(!hasError(response)) {
+		return true;
+	} else {
+		setError(method, response);
+	}
+	return false;
+}
+
+//Click the biggest button on the screen.
+//@return The name of the button.
+func String clickBiggestButton(){
+	String method = "clickBiggestButton";
+
+	String response = executePost(method, "");
+	if(!hasError(response)) {
+		return response;
+	} else {
+		setError(method, response);
+	}
+	return response;
+}
+
+//Enter text into the input field.
+//@param index - The input index.
+//@param text -  The text to enter.
+func void enterText(String index, String text){
+	String method = "enterText";
+	String param = "[%s,\"%s\"]" % (index, text);
+	executePost(method, param);
+}
+
+//Waits for a component to become visible with the partial given text.
+//@param text - The element text.
+//@param timeout -  Milliseconds to wait before giving up and failing the command?
+func boolean waitUntilPartialTextExist(String text, int timeout){
+	String method = "waitUntilViewWithPartialTextExists";
+	String param = "[\"%s\", %s]" % (text, toString(timeout));
+	String response = executePost(method, param);
+
+	if(!hasError(response)) {
+		return true;
+	} 
+	return false;
+} 
+
+//Waits for a component to become visible with the exact given text.
+//Uses the default timeout in the server connection instance.
+//@param text - The element text.
+func boolean waitForTextExist(String text){
+	return waitUntilExactTextExists(text, server.timeout);
+} 
+
+//Waits for a component to become visible with the exact given text.
+//@param text - The element text.
+//@param timeout -  Milliseconds to wait before giving up and failing the command.
+func boolean waitUntilExactTextExists(String text, int timeout){
+	String method = "waitUntilExactTextExists";
+	String param = "[[\"%s\"], %s]" % (text, toString(timeout));
+	String response = executePost(method, param);
+
+	if(!hasError(response)) {
+		return true;
+	} 
+	return false;
+} 
+
+//Waits for a component view to become visible with the exact given text.
+//@param text - The element text.
+//@param timeout -  Milliseconds to wait before giving up and failing the command.
+func boolean waitUntilViewWithExactTextExists(String text, int timeout){
+	String method = "waitUntilViewWithExactTextExists";
+	String param = "[[\"%s\"], %s]" % (text, toString(timeout));
+	String response = executePost(method, param);
+	return (!hasError(response))?true:false;
+}
+
+//Swipes relative to the device screen size (0,0 top left, 1,1 bottom right).
+//@param x - x coordinate.
+//@param y - y coordinate.
+//@param xend - x end coordinate.
+//@param yend - y end coordinate.
+//@return true If the action is complete, otherwise returns false.
+func boolean swipeRelative(int x, int y, int xend, int yend){
+	String method = "swipeRelative";
+	String param = "[%s,%s,%s,%s]" % (toString(x), toString(y), toString(xend), toString(yend));
+	String response = executePost(method, param);
+
+	if(!hasError(response)) {
+		return true;
+	} else {
+		setError(method, response);
+	}
+	return false;
+}
+
+//Taps on the component.
+//@param x - x-coordinate of the tap.
+//@param y - y-coordinate of the tap.
+func void tap(int x, int y){
+	shell("input tap %s %" % (toString(x), toString(y)));
+}
+
+//Sends a KeyEvent.
+//@param Keycode - An event code.
+func void sendKeyEvent(String keycode){
+	shell("input keyevent %s" % (keycode));
+}
+
+//Presses the BACK button.
+func void pressBack(){
+	sendKeyEvent("4");
+}
+
+//Presses the MENU button.
+func void pressMenu(){
+	sendKeyEvent("1");
+}
+
+//Presses the HOME button.
+func void pressHome(){
+	sendKeyEvent("3");
+}
+
+//Presses the TAB button.
+func void pressTab(){
+	sendKeyEvent("61");
+}
+
+//Presses the ENTER button.
+func void pressEnter(){
+	sendKeyEvent("66");
+}
+
+//Presses the APP MENU button.
+func void pressAppMenu(){
+	sendKeyEvent("82");
+}
+
+//Scroll down.
+func void scrollDown(int dx, int dy){
+	sendKeyEvent("rol %s %s" % (toString(dx), toString(dy)));
+}
+
+//Create a pause.
+//@param timeout - Milliseconds.
+func void delay(int timeout){
+	String method = "delay";
+    String param = "[\"%s\"]" % (toString(timeout));
+	executePost(method, param);
+}
+
+//Opens the Notification Bar.
+func void openNotificationBar(){
+	String method = "openNotificationBar";
+	executePost(method, "");
+}
+
+//Take a screenshot and save to a PNG file.
+//@param localPath - The path to the destination (local) file (without the extension file). 
+func void takeScreenshot(String localFile){
+	String method = "getScreenshot";
+	String remoteScreenshot = executePost(method, "").replace("\"", "");
+	adb_pull(server.deviceId, remoteScreenshot, localFile + ".png");
+    shell("rm %s" %(remoteScreenshot));
+}
+
+//Gets a dump of views.
+//@return A dump of views.
+func String getDump(){
+	String method = "dump";
+	return executeGet(method);
+}
+
+//Gets the current top activity.
+//@return The current activity.
+func String getActivityName(){
+	String method = "getActivityName";
+	return executePost(method, "").replace("\"", "");
+}
+
+//Writes in the the server log.
+func void log(String text){
+	String method = "log";
+	String param = "[\"%s\"]" % (text);
+	executePost(method, param);	
+}
+
+//Gets the server execution logs.
+func String getServerLog(){
+	String method = "exportLogs";
+	return executePost(method, "");	
+}
+
+//Clears the server execution logs.
+func String clearServerLog(){
+	String method = "clearLogs";
+	return executePost(method, "");	
+}
+
+//Execute a shell command on the device.
+//@param cmd - The shell command to execute.
+func String shell(String cmd){
+	String method = "shell";
+	String param = "[\"%s\"]" % (cmd);
+	return executePost(method, param);	
+}
+
+//Execute the "execute" service on the server.
+//@param method - The method name. 
+//@param param -  The method parameters.
+//@return The server response.
+func String executePost(String method, String param) {	
+	String url = "http://%s:%s/execute" % (server.ip, server.port);	
+	String[][] body = {{"on","imperiusgeorge.UIHelp"},{"method",""},{"args",""}};
+	body[1][1] = method;
+	body[2][1] = (!param.isEmpty())?param:"[]";
+
+	if(verbose)
+		print("Server POST:[%s]\nParameters:[%s]" % (url, Arrays.deepToString(body)));
+	return httpPost(url, body);
+}
+
+//Execute the GET services on the server.
+//@param method - The method name. 
+//@return The server response.
+func String executeGet(String method) {	
+	String url = "http://%s:%s/%s" % (server.ip, server.port, method);	
+
+	if(verbose)
+		print("Server GET:[%s]" % (url));
+	return httpGet(url);
+}
+
+//Check if the server response has some error.
+//@param response - The server response.
+//@return true if the response has some error, otherwise returns false.
+func boolean hasError(String response){
+	String[] errors =  {"Error", "AssertionError", "NoSuchMethodError", "UiObjectNotFoundException"}; 
+	for(String error : errors){
+		if(response.contains(error)){
+			return true;
+		}
+	}
+	return false;
+}
+ 
+//Print an error and exit.
+//@param method - The method name in which the error occurred.
+//@para desscription - The error description.
+func void setError(String method, String description){
+	print("Error on [%s]. Description [%s]." % (method, description));
+	System.exit(1);
+}
+
+//Assert that the given condition is true
+//@param condition
+//@param message - Custom error message.
+func void assertThatIsTrue(boolean condition, String message){	
+	String msg = "Expected [true] but was [%s]" %(toString(condition));
+
+	if(!condition){
+		if(!message.isEmpty()){
+			msg = message;
+		}
+		setError("assertThatIsTrue", msg);
+	}
+}
+
+//Assert that the given condition is false
+//@param condition
+//@param message - Custom error message.
+func void assertThatIsFalse(boolean condition, String message){	
+	String msg = "Expected [false] but was [%s]" %(toString(condition));
+
+	if(condition){
+		if(!message.isEmpty()){
+			msg = message;
+		}
+		setError("assertThatIsFalse", msg);
+	}
+}
+
+//Asserts that the current activity name is equal to a given one.
+//@param expected - The activity name.
+func void assertThatCurrentActivityIs(String expected) {
+		String actual = getActivityName();
+		String msg = "Expected that the current activity is [%s] but was [%s]" % (expected, actual);
+		assertThatIsTrue(actual.equalsIgnoreCase(expected), msg);
+}
+
+////Asserts that the current text is present on the screen.
+//@param expected - The expected text.
+func void assertThatTextIsPresent(String expected){
+	 boolean actual = waitUntilExactTextExists(expected,server.timeout);
+	 String msg = "Expected that the current text is present [%s] but was [%s]" % (expected, toString(actual));
+	 assertThatIsTrue(actual,msg);
+}
+//#END: ImperiusGeorge commands
+
+//#START SCRIPT
+//Insert the script here.
+//#END SCRIPT
