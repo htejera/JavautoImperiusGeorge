@@ -68,3 +68,14 @@ setup();
   testListScreen();
 tearDown();
 ```
+
+## Contributing
+![gauchoiwantyou2](https://cloud.githubusercontent.com/assets/3797402/6204483/3f8bddbe-b534-11e4-9966-fbc78e8d8161.gif)
+
+
+* Create your feature branch (git checkout -b my-new-feature)
+* Commit your changes (git commit -am 'Add some feature')
+* Push to the branch (git push origin my-new-feature)
+* Create new Pull Request
+
+If you're looking to report a bug, please use the [issue tracker](https://github.com/ohtejera/JavautoImperiusGeorge/issues) in GitHub. Support can also be found that way.
