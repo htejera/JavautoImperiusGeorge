@@ -18,7 +18,7 @@ verbose = true;
 
 func void setup(){
   install("","-r", apk);
-  startServer("", "localhost", "1337", "3000");
+  startServer("", "localhost", "1337", 3000);
   startApp(app + mainActivity);
   assertThatCurrentActivityIs("ImperiusGeorge");
 }
