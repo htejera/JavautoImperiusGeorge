@@ -2,9 +2,9 @@
 
 ## Introduction
 
-This project is a simple [Javauto](http://javauto-lang.org/) [ImperiusGeorge](https://github.com/lookout/ImperiusGeorge) client. Remote-control/execute Java on Android phones via Javauto. It works on Android 4.1+ simply with Android device attached via adb, no need to install anything on Android device.
+This project is a simple [Javauto](http://javauto.github.io/) [ImperiusGeorge](https://github.com/lookout/ImperiusGeorge) client. Remote-control/execute Java on Android phones via Javauto. It works on Android 4.1+ simply with Android device attached via adb, no need to install anything on Android device.
 
-* Powered by [Javauto](http://javauto-lang.org/) . We welcome all contributions. New to Javauto? Not a problem, Javauto is [easy to learn!](http://javauto-lang.org/docs/getting-started.html)
+* Powered by [Javauto](http://javauto.github.io/) . We welcome all contributions. New to Javauto? Not a problem, Javauto is [easy to learn!](http://javauto.github.io/docs/getting-started.html)
 
 Website: http://htejera.ukelelestudio.com/imperiusClient/
 
